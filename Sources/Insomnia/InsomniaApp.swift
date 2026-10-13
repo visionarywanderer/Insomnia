@@ -25,6 +25,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let loginItem = LoginItem()
     private var statusItem: StatusItemController?
     private var settingsWindow: SettingsWindow?
+    private var auto: AutoController?
     private var terminating = false
 
     override init() {
@@ -70,6 +71,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 Log.error("could not save config after the launch at login check: \(error.localizedDescription)")
             }
         }
+        let auto = AutoController(manager: manager, paths: manager.paths)
+        self.auto = auto
         let settings = SettingsWindow { [manager, secrets, locationPermission, loginItem] in
             AnyView(
                 SettingsView(
@@ -81,9 +84,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
         }
         settingsWindow = settings
-        statusItem = StatusItemController(manager: manager, status: status) { [weak settings] in
+        statusItem = StatusItemController(manager: manager, status: status, auto: auto) { [weak settings] in
             settings?.show()
         }
+        auto.start()
         Task { await manager.reconcile() }
     }
 

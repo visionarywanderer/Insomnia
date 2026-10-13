@@ -11,6 +11,15 @@ struct Config: Codable, Equatable, Sendable {
     /// Hard ceiling on a session, including extensions. 30 days.
     var maxDuration: TimeInterval = 30 * 24 * 3600
 
+    // Auto
+    /// Keep the Mac awake while a hooked agent (Claude Code, Codex) is
+    /// working, and let it sleep once every agent is done or waiting.
+    var autoMode: Bool = false
+    /// How long every agent must stay idle before the Auto session ends.
+    var autoIdleGrace: TimeInterval = 60
+    /// Ceiling on one Auto session, for an agent that never reports done.
+    var autoMaxDuration: TimeInterval = 8 * 3600
+
     // Lid-close actions
     /// Bundle ids to SIGSTOP while the lid is closed.
     var freezeList: [String] = Config.defaultFreezeList
@@ -144,6 +153,9 @@ struct Config: Codable, Equatable, Sendable {
         presets = try c.decodeIfPresent([TimeInterval].self, forKey: .presets) ?? d.presets
         defaultPreset = try c.decodeIfPresent(TimeInterval.self, forKey: .defaultPreset) ?? d.defaultPreset
         maxDuration = try c.decodeIfPresent(TimeInterval.self, forKey: .maxDuration) ?? d.maxDuration
+        autoMode = try c.decodeIfPresent(Bool.self, forKey: .autoMode) ?? d.autoMode
+        autoIdleGrace = try c.decodeIfPresent(TimeInterval.self, forKey: .autoIdleGrace) ?? d.autoIdleGrace
+        autoMaxDuration = try c.decodeIfPresent(TimeInterval.self, forKey: .autoMaxDuration) ?? d.autoMaxDuration
         freezeList = try c.decodeIfPresent([String].self, forKey: .freezeList) ?? d.freezeList
         freezeAllApps = try c.decodeIfPresent(Bool.self, forKey: .freezeAllApps) ?? d.freezeAllApps
         dockerRule = try c.decodeIfPresent(Bool.self, forKey: .dockerRule) ?? d.dockerRule

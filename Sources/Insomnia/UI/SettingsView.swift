@@ -25,6 +25,7 @@ struct SettingsView: View {
     var body: some View {
         Form {
             sessionSection
+            autoSection
             lidSection
             agentSection
             powerSection
@@ -94,6 +95,61 @@ struct SettingsView: View {
     }
 
     // MARK: Sections
+
+    /// Hook state as read from the two files; refreshed after each change.
+    @State private var hooksInstalled: [String: Bool] = [:]
+    @State private var hookError: String?
+    private let hookTargets = [AgentHooks.claude(), AgentHooks.codex()]
+
+    private var autoSection: some View {
+        Section {
+            Toggle("Stay awake while agents work, then sleep", isOn: bind(\.autoMode))
+            Picker("Sleep after agents are idle for", selection: bind(\.autoIdleGrace)) {
+                ForEach([30.0, 60, 120, 300, 600], id: \.self) { Text(chipLabel(for: $0)).tag($0) }
+            }
+            Picker("Longest Auto session", selection: bind(\.autoMaxDuration)) {
+                ForEach([2.0 * 3600, 4 * 3600, 8 * 3600, 12 * 3600, 24 * 3600], id: \.self) { Text(chipLabel(for: $0)).tag($0) }
+            }
+            ForEach(hookTargets, id: \.source) { target in
+                LabeledContent(target.name) {
+                    if hooksInstalled[target.source] == true {
+                        Button("Remove hooks") { changeHooks(target, install: false) }
+                    } else {
+                        Button("Install hooks") { changeHooks(target, install: true) }
+                    }
+                }
+            }
+            if let hookError {
+                Text(hookError).font(.caption).foregroundStyle(.red)
+            }
+        } header: {
+            Text("Auto")
+        } footer: {
+            Text("Claude Code (terminal and the Claude app's Code tab) and Codex (CLI, app and IDE extension) report when they start and stop work through hooks. When every agent is done or waiting for you, the session ends and the Mac sleeps: always with the lid closed, and with it open only if nobody has used the keyboard or mouse for that time. Codex asks you to trust new hooks the first time they run.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .onAppear(perform: refreshHooks)
+    }
+
+    private func refreshHooks() {
+        hooksInstalled = Dictionary(uniqueKeysWithValues: hookTargets.map { ($0.source, $0.isInstalled) })
+    }
+
+    private func changeHooks(_ target: AgentHooks, install: Bool) {
+        do {
+            if install {
+                guard let binary = Bundle.main.executablePath else { return }
+                try target.install(binary: binary)
+            } else {
+                try target.uninstall()
+            }
+            hookError = nil
+        } catch {
+            hookError = "\(target.name): \(error.localizedDescription)"
+        }
+        refreshHooks()
+    }
 
     private var sessionSection: some View {
         Section("Session") {
