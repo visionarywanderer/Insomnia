@@ -1,13 +1,9 @@
 import CoreGraphics
-#if canImport(SwiftUI)
-import SwiftUI
-#endif
 
-/// The soft charcoal palette from the approved identity spec, as plain values.
-/// The icon generator compiles this file directly, so the palette itself
-/// needs neither SwiftUI nor AppKit; the `Color` conversion at the bottom is
-/// guarded so it only comes along where SwiftUI exists. Semantic colours
-/// (warning red, system text) are not branded and stay wherever they are used.
+/// The app icon's two colours, as plain values. The icon generator compiles
+/// this file directly, so it needs neither SwiftUI nor AppKit. Everything
+/// drawn in the app itself uses system colours, so it follows light and
+/// dark mode and the accent colour.
 enum BrandPalette {
     struct RGB: Equatable, Sendable {
         let red: CGFloat
@@ -27,18 +23,6 @@ enum BrandPalette {
 
     /// App icon tile: a mid charcoal grey.
     static let midnight = RGB(hex: 0x303336)
-    /// Pill background in the menu bar: a deep charcoal.
-    static let charcoal = RGB(hex: 0x17191B)
     /// The mark on the app icon: a warm off-white.
     static let moonWhite = RGB(hex: 0xE6E3DD)
-    /// Active state: focus and hold rings. The menu bar mark itself stays monochrome.
-    static let violet = RGB(hex: 0xA6BBC3)
 }
-
-#if canImport(SwiftUI)
-extension Color {
-    init(brand rgb: BrandPalette.RGB) {
-        self.init(.sRGB, red: rgb.red, green: rgb.green, blue: rgb.blue, opacity: 1)
-    }
-}
-#endif
