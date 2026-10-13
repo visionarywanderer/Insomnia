@@ -30,40 +30,39 @@
   <img alt="Experimental source build" src="https://img.shields.io/badge/Status-experimental-536D78?style=flat-square">
 </p>
 
+> **This is a fork of [krishhgg/Insomnia](https://github.com/krishhgg/Insomnia)**
+> by Krish Garg and its contributors, under the same MIT license. It adds a
+> native macOS popover, an **Auto** mode that keeps the Mac awake while Claude
+> Code or Codex works and lets it sleep when they are done, and fixes for the
+> lid and resume paths. All credit for the original app goes to them.
+
 > **Use a stable, well-ventilated surface, not a closed bag.** Insomnia is
 > experimental. Recovery can fail, and a running timer is not a safety
 > guarantee.
 > [Validation status](docs/release-validation.md) · [Apple's ventilation guidance](https://support.apple.com/en-us/102336)
 
-<p align="center">
-  <img src="docs/assets/session-flow.svg" alt="Illustrated menu-bar controls: enter Days, Hours, and Minutes, watch the countdown, and hold the end control to finish early. Click the eye or countdown to add time. Closing the lid is optional, and incomplete recovery needs attention." width="880">
-</p>
-
 ## Install
 
 Requires macOS 26 or later on an Apple Silicon Mac.
 
-Paste this into your coding agent:
+This fork publishes no releases yet: build it from source (below). The
+release installer installs the original app, without this fork's changes. To
+use it, paste this into your coding agent:
 
 ```text
 Install the latest stable Insomnia release by following https://github.com/krishhgg/Insomnia/blob/main/skills/install-insomnia/SKILL.md. If a step needs my password, give me the command to run in Terminal.
 ```
 
 For the newest nightly, write "the newest Insomnia nightly prerelease" in
-place of "the latest stable Insomnia release". Nightlies are built from `main`
-on each day it has new commits. They have the newest code and may be broken.
-
-To install a release yourself, follow [docs/install.md](docs/install.md). It
-covers both channels, how to check the download, and `v0.1.0`, which installs
-differently.
+place of "the latest stable Insomnia release". To install a release yourself,
+follow [docs/install.md](docs/install.md).
 
 ### Build from source
 
-Needs Xcode with Swift 6.2 or later. Replace `v<version>` with the latest
-stable tag, or a nightly tag for the newest code:
+Needs Xcode with Swift 6.2 or later:
 
 ```bash
-git clone --branch v<version> --depth 1 https://github.com/krishhgg/Insomnia.git
+git clone --depth 1 https://github.com/visionarywanderer/Insomnia.git
 cd Insomnia
 ./scripts/install.sh
 open "$HOME/Applications/Insomnia.app"
@@ -98,15 +97,36 @@ file and explains how upgrades replace them.
 
 ## Using it
 
-1. **Start.** Click the eye in the menu bar, enter days, hours and minutes,
-   and press Enter.
-2. **Add time.** Click the eye or the countdown during a session.
-3. **End early.** Press and hold the end control next to the countdown.
+1. **Start.** Click the eye in the menu bar. Pick a preset, or "Until a
+   time" and a time, and press Start (or Return).
+2. **Add time.** Click the eye during a session and choose Extend.
+3. **End early.** Click the eye and press End Session.
 4. **Settings and status.** Right-click the eye. Quit asks Insomnia to undo
    the session first, and it refuses while a change is still waiting to be
    undone. Saved audio for an output that isn't connected doesn't hold it up.
    Insomnia restores that output if it reconnects while the app runs, or at
    the next launch.
+
+### Auto: no timer
+
+Turn on **Auto** in the popover or in Settings, then install the hooks under
+Settings → Auto. Claude Code (the terminal CLI and the Claude app's Code tab)
+and Codex (the CLI, the Codex app and the IDE extension) then report when they
+start and stop work. While any agent works, the Mac stays awake. Once every
+agent is done or waiting for you for the idle time (one minute by default),
+the session ends and the Mac sleeps: always with the lid closed, and with it
+open only if nobody has used the keyboard or mouse in that time.
+
+- The hooks run `Insomnia --agent busy|idle --source claude|codex`. Installing
+  keeps every other hook and setting and backs the file up once, as
+  `settings.json.insomnia-backup` or `hooks.json.insomnia-backup`.
+- Codex asks you to trust new hooks the first time they run.
+- Plain chats in the Claude app have no hooks, so Auto cannot see them.
+- An agent that crashes stops counting at once; one that never reports done
+  stops counting after 30 minutes without a tool call, and an Auto session
+  never runs past its ceiling (8 hours by default).
+- A lid closed while an external display is connected counts as open, so a
+  MacBook used in clamshell mode is never put to sleep under you.
 
 You don't have to close the lid, and opening it doesn't end the session.
 When the timer or a battery or heat rule ends a session with the lid closed,
