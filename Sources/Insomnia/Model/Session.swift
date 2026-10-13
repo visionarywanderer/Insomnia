@@ -7,12 +7,19 @@ struct Session: Codable, Equatable, Sendable {
     var endsAt: Date
     /// Every extension applied, in order, in seconds.
     var extensions: [TimeInterval]
+    /// Started by Auto mode: it ends when the agents are done, and `endsAt`
+    /// is only its ceiling. Absent (nil) for a timed session and in files
+    /// written before Auto existed.
+    var auto: Bool?
 
-    init(startedAt: Date, endsAt: Date, extensions: [TimeInterval] = []) {
+    init(startedAt: Date, endsAt: Date, extensions: [TimeInterval] = [], auto: Bool? = nil) {
         self.startedAt = startedAt
         self.endsAt = endsAt
         self.extensions = extensions
+        self.auto = auto
     }
+
+    var isAuto: Bool { auto == true }
 
     /// Seconds left until `endsAt`, never negative.
     func remaining(at now: Date) -> TimeInterval {

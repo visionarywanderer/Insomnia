@@ -19,12 +19,14 @@ enum EndReason: String, Sendable {
     /// may still have been applied, so the start is undone from the journal
     /// like an end rather than rolled back from memory.
     case startFailed
+    /// Auto mode: every agent finished or is waiting for input.
+    case agentIdle
 
-    /// The timer and floor-rule ends. With the lid closed they also ask
+    /// The timer, floor-rule and Auto ends. With the lid closed they also ask
     /// macOS to sleep (`SessionManager.sleepClosedLidIfOwed`).
     var sleepsAClosedLid: Bool {
         switch self {
-        case .timer, .thermalCritical, .batteryFloor, .batteryUnreadable: true
+        case .timer, .thermalCritical, .batteryFloor, .batteryUnreadable, .agentIdle: true
         case .user, .quit, .backstop, .recoveryUnavailable, .startFailed: false
         }
     }
@@ -1207,7 +1209,7 @@ final class SessionManager {
     /// setting may have been applied before the error or timeout), so it is
     /// undone from the journal like an end, and the journal keeps the entry
     /// until that undo is confirmed.
-    func start(duration: TimeInterval) async {
+    func start(duration: TimeInterval, auto: Bool = false) async {
         guard !quitRequested else {
             Log.info("start ignored: quit requested")
             return
@@ -1217,13 +1219,13 @@ final class SessionManager {
             return
         }
         let ticket = endTicket
-        _ = await exclusive("start") { await self.performStart(duration: duration, ticket: ticket) }
+        _ = await exclusive("start") { await self.performStart(duration: duration, auto: auto, ticket: ticket) }
         // A start that goes through before a refused launch reconcile runs
         // again drops that reconcile, and takes over its check.
         await settleEarlierCommand()
     }
 
-    private func performStart(duration: TimeInterval, ticket: Int) async {
+    private func performStart(duration: TimeInterval, auto: Bool, ticket: Int) async {
         guard session == nil else {
             Log.info("start ignored: session already active")
             return
@@ -1235,7 +1237,8 @@ final class SessionManager {
         // The person wants the Mac awake now.
         closedLidSleepOwed = false
         let now = clock()
-        let new = SessionMath.newSession(now: now, duration: duration, maxDuration: config.maxDuration)
+        var new = SessionMath.newSession(now: now, duration: duration, maxDuration: config.maxDuration)
+        if auto { new.auto = true }
         // What was on disk before this attempt, read under the lock. A
         // rollback puts exactly this back: an entry an earlier failed restore
         // left behind is evidence, not something this start may clear.
@@ -3282,6 +3285,7 @@ final class SessionManager {
             : "A previous session left changes behind; everything has been undone."
         case .recoveryUnavailable: "Insomnia could not arm its recovery agent for the session found on disk, so it ended the session. Sleep is back to normal."
         case .startFailed: "Insomnia could not disable sleep, so no session was started. Sleep is back to normal."
+        case .agentIdle: "Your agents are done or waiting for you. Sleep is back to normal."
         }
     }
 }

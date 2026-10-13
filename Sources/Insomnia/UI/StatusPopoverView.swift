@@ -6,6 +6,8 @@ import SwiftUI
 /// follows light and dark mode and the accent color like any Mac app.
 struct StatusPopoverView: View {
     let manager: SessionManager
+    let auto: AutoController?
+    let onSetAuto: (Bool) -> Void
     let onStart: (TimeInterval) -> Void
     let onExtend: (TimeInterval) -> Void
     let onEnd: () -> Void
@@ -18,6 +20,10 @@ struct StatusPopoverView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             header
+            if auto != nil {
+                autoSection
+                Divider()
+            }
             if manager.isActive { running } else { idle }
             if let error = manager.lastError {
                 Label(error, systemImage: "exclamationmark.triangle.fill")
@@ -55,7 +61,51 @@ struct StatusPopoverView: View {
 
     private var subtitle: String {
         guard let s = manager.session else { return "Start a session to keep it awake, lid closed too." }
+        if s.isAuto { return "Auto \u{00B7} until your agents are done" }
         return "Until \(s.endsAt.formatted(date: .omitted, time: .shortened)) \u{00B7} \(manager.countdownText) left"
+    }
+
+    // MARK: Auto
+
+    private var autoSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Toggle(isOn: Binding(get: { manager.config.autoMode }, set: { onSetAuto($0) })) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Auto")
+                    Text("Stay awake while agents work, then sleep")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .toggleStyle(.switch)
+            if manager.config.autoMode, let auto {
+                if auto.busyAgents.isEmpty {
+                    Text("No agent working right now")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(auto.busyAgents) { agent in
+                        Label {
+                            Text("\(Self.displayName(agent.source)) working")
+                        } icon: {
+                            Image(systemName: "circle.fill")
+                                .font(.system(size: 6))
+                                .foregroundStyle(.green)
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+    }
+
+    static func displayName(_ source: String) -> String {
+        switch source {
+        case "claude": "Claude Code"
+        case "codex": "Codex"
+        default: source
+        }
     }
 
     // MARK: Idle
@@ -116,16 +166,22 @@ struct StatusPopoverView: View {
 
     private var running: some View {
         HStack {
-            Menu("Extend") {
-                ForEach(manager.config.presets, id: \.self) { p in
-                    Button("+ \(chipLabel(for: p))") { onExtend(p) }
-                }
+            if manager.session?.isAuto != true {
+                extendMenu
             }
-            .fixedSize()
             Spacer()
             Button("End Session", role: .destructive, action: onEnd)
                 .keyboardShortcut(.defaultAction)
         }
         .controlSize(.large)
+    }
+
+    private var extendMenu: some View {
+        Menu("Extend") {
+            ForEach(manager.config.presets, id: \.self) { p in
+                Button("+ \(chipLabel(for: p))") { onExtend(p) }
+            }
+        }
+        .fixedSize()
     }
 }

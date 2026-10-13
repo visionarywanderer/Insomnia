@@ -11,6 +11,9 @@ final class StatusItemController: NSObject {
 
     let manager: SessionManager
     let status: any StatusSource
+    /// Auto mode, shown and switched in the popover; nil in tests that do
+    /// not need it.
+    let auto: AutoController?
     let reminder = ReminderScheduler()
     /// Opens the settings window. Injected because the window is owned by the
     /// app delegate, which outlives any one status item.
@@ -36,12 +39,14 @@ final class StatusItemController: NSObject {
     init(
         manager: SessionManager,
         status: any StatusSource,
+        auto: AutoController? = nil,
         showSettings: @escaping () -> Void,
         makeWidthWriter: WidthWriterFactory? = nil,
         confirmRelaunch: (@MainActor (String) -> Bool)? = nil
     ) {
         self.manager = manager
         self.status = status
+        self.auto = auto
         self.showSettings = showSettings
         self.makeWidthWriter = makeWidthWriter
         self.confirmRelaunch = confirmRelaunch ?? Self.askBeforeRelaunch
@@ -123,6 +128,8 @@ final class StatusItemController: NSObject {
         popover.animates = !Motion.reduceMotion
         popover.contentViewController = NSHostingController(rootView: StatusPopoverView(
             manager: manager,
+            auto: auto,
+            onSetAuto: { [weak self] on in self?.setAutoMode(on) },
             onStart: { [weak self] d in self?.start(duration: d) },
             onExtend: { [weak self] d in self?.extend(by: d) },
             onEnd: { [weak self] in self?.endNow() },
@@ -169,6 +176,18 @@ final class StatusItemController: NSObject {
     func extend(by duration: TimeInterval) {
         guard manager.isActive else { return }
         Task { @MainActor in await manager.extend(by: duration) }
+    }
+
+    /// The popover's Auto switch, saved like a Settings change.
+    func setAutoMode(_ on: Bool) {
+        guard manager.config.autoMode != on else { return }
+        manager.config.autoMode = on
+        do {
+            try manager.store.saveConfig(manager.config)
+        } catch {
+            Log.error("could not save config: \(error.localizedDescription)")
+        }
+        Task { @MainActor in await auto?.tick() }
     }
 
     func endNow() {
