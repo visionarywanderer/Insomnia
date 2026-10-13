@@ -1379,6 +1379,28 @@ final class LidActionsTests: XCTestCase {
         XCTAssertNil(m.lastError, "the warning of the refused restore goes once the retry restores it")
     }
 
+    /// A lid open that meets a recovery lock held past the app's wait is
+    /// replayed after the retry delay. Before, nothing retried it: frozen
+    /// apps stayed stopped and audio muted until the next hinge change.
+    func testALidOpenRefusedByABusyLockIsReplayedLater() async throws {
+        let (m, actions) = await make(lockTimeout: 0.05, retryDelay: 0.1)
+        await m.start(duration: 3600)
+        await actions.onClose()
+        XCTAssertEqual(h.audio.device(FakeAudioControl.speakers)?.muted, true)
+        let replays = Locked<[Bool]>([])
+        m.resyncAfterCommand = { replays.value.append($0) }
+        let held = try XCTUnwrap(try RecoveryLock(url: h.home.paths.recoveryLock).tryAcquire())
+
+        await actions.onOpen()
+        XCTAssertTrue(m.lidEventDeferred)
+        held.release()
+        for _ in 0..<500 where replays.value.isEmpty {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertEqual(replays.value, [true], "the refused lid event is replayed")
+        XCTAssertFalse(m.lidEventDeferred)
+    }
+
     /// A refused device change puts up a warning, and a start refused for
     /// the same busy lock puts up its own after it. When the audio is
     /// restored, only the audio's warning would go, and it is no longer

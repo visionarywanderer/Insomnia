@@ -491,6 +491,7 @@ final class SessionManager {
     @ObservationIgnored private(set) var lidEventDeferred = false
     /// The settle pass waiting to run again after a busy lock.
     @ObservationIgnored private var settleRetry: Task<Void, Never>?
+    @ObservationIgnored private var lidRetry: Task<Void, Never>?
     /// The launch reconcile waiting to run again after a refusal.
     @ObservationIgnored private var reconcileRetry: Task<Void, Never>?
     /// A reconcile found the record of a `sudo pmset` an earlier run left
@@ -717,6 +718,7 @@ final class SessionManager {
             } catch {
                 let line = "\(what) skipped, nothing changed: \(error.localizedDescription)\(self.recordedLockHolder(error))"
                 self.fail(line)
+                if case .lidEvent? = deferred { self.retryLidEventLater() }
                 return .failure(.lockBusy(line))
             }
             var lockHandedOver = false
@@ -1039,6 +1041,23 @@ final class SessionManager {
         lidEventDeferred = false
         resyncAfterCommand?(replayLid)
         if !checked { scheduleSettleRetry() }
+    }
+
+    /// A lid event refused for a busy lock is replayed later for the latest
+    /// lid state. Without this a lid open that met the lock left apps frozen
+    /// and audio muted until the next hinge change or the session end.
+    private func retryLidEventLater() {
+        lidEventDeferred = true
+        lidRetry?.cancel()
+        let delay = recoveryRetryDelay
+        lidRetry = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard let self, !Task.isCancelled, self.lidEventDeferred, self.session != nil else { return }
+            self.lidRetry = nil
+            self.lidEventDeferred = false
+            Log.info("retrying the lid event the busy recovery lock refused")
+            self.resyncAfterCommand?(true)
+        }
     }
 
     private func scheduleSettleRetry() {
@@ -2922,7 +2941,13 @@ final class SessionManager {
         // One timer at the deadline. Fire dates in the past fire immediately.
         let timer = Timer(fire: endsAt, interval: 0, repeats: false) { [weak self] _ in
             Task { @MainActor in
-                guard let self, let s = self.session, s.isExpired(at: self.clock()) else { return }
+                guard let self, let s = self.session else { return }
+                // Early (the wall clock moved back): wait for the deadline
+                // again, or only the backstop would ever end the session.
+                guard s.isExpired(at: self.clock()) else {
+                    if self.scheduledDeadline == endsAt { await self.armDeadline(s.endsAt) }
+                    return
+                }
                 await self.end(reason: .timer)
             }
         }
