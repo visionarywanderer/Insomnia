@@ -100,15 +100,17 @@ struct SettingsView: View {
     @State private var hooksInstalled: [String: Bool] = [:]
     @State private var hookError: String?
     private let hookTargets = [AgentHooks.claude(), AgentHooks.codex()]
+    private static let graceChoices: [TimeInterval] = [30, 60, 120, 300, 600]
+    private static let ceilingChoices: [TimeInterval] = [2 * 3600, 4 * 3600, 8 * 3600, 12 * 3600, 24 * 3600]
 
     private var autoSection: some View {
         Section {
             Toggle("Stay awake while agents work, then sleep", isOn: bind(\.autoMode))
             Picker("Sleep after agents are idle for", selection: bind(\.autoIdleGrace)) {
-                ForEach([30.0, 60, 120, 300, 600], id: \.self) { Text(chipLabel(for: $0)).tag($0) }
+                ForEach(Self.graceChoices, id: \.self) { Text(chipLabel(for: $0)).tag($0) }
             }
             Picker("Longest Auto session", selection: bind(\.autoMaxDuration)) {
-                ForEach([2.0 * 3600, 4 * 3600, 8 * 3600, 12 * 3600, 24 * 3600], id: \.self) { Text(chipLabel(for: $0)).tag($0) }
+                ForEach(Self.ceilingChoices, id: \.self) { Text(chipLabel(for: $0)).tag($0) }
             }
             ForEach(hookTargets, id: \.source) { target in
                 LabeledContent(target.name) {

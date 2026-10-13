@@ -122,7 +122,7 @@ enum AgentActivity {
     static func name(of pid: Int32) -> String {
         var buffer = [CChar](repeating: 0, count: 256)
         guard proc_name(pid, &buffer, UInt32(buffer.count)) > 0 else { return "" }
-        return String(cString: buffer)
+        return String(decoding: buffer.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
     }
 
     static func identity(of pid: Int32) -> ProcessIdentity? {
