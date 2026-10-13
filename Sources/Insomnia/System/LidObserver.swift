@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 import IOKit
 
 /// Spec section 3: IOKit interest notification on `IOPMrootDomain`. The
@@ -27,6 +27,7 @@ final class LidObserver {
     private var port: IONotificationPortRef?
     private var service: io_service_t = 0
     private var notification: io_object_t = 0
+    private var screenObserver: (any NSObjectProtocol)?
 
     /// `read` and `debounce` are injectable for tests; the app uses the
     /// registry and the 2 s debounce.
@@ -38,6 +39,28 @@ final class LidObserver {
     /// Pure registry read: true = closed, false = open, nil = unavailable
     /// (no IOPMrootDomain or no clamshell, e.g. a desktop).
     nonisolated static func readClamshellState() -> Bool? {
+        effectiveClosed(lid: readRawClamshellState(), externalDisplay: hasActiveExternalDisplay())
+    }
+
+    /// A lid closed while an external display is active is clamshell use:
+    /// someone is working on that display, so nothing lid-close does (the
+    /// countdown pause, the freeze list, mute, darken) applies (#97).
+    nonisolated static func effectiveClosed(lid: Bool?, externalDisplay: Bool) -> Bool? {
+        guard let lid else { return nil }
+        return lid && !externalDisplay
+    }
+
+    /// Any active display that is not the built-in panel.
+    nonisolated static func hasActiveExternalDisplay() -> Bool {
+        var count: UInt32 = 0
+        guard CGGetActiveDisplayList(0, nil, &count) == .success, count > 0 else { return false }
+        var ids = [CGDirectDisplayID](repeating: 0, count: Int(count))
+        guard CGGetActiveDisplayList(count, &ids, &count) == .success else { return false }
+        return ids.prefix(Int(count)).contains { CGDisplayIsBuiltin($0) == 0 }
+    }
+
+    /// The registry's `AppleClamshellState` alone.
+    nonisolated static func readRawClamshellState() -> Bool? {
         let service = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("IOPMrootDomain"))
         guard service != 0 else { return nil }
         defer { IOObjectRelease(service) }
@@ -72,10 +95,17 @@ final class LidObserver {
             stop()
             return
         }
+        // Plugging or unplugging a display while the lid is shut changes
+        // the effective state without a clamshell message.
+        screenObserver = NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.handleInterest() }
+        }
         Log.info("lid observer started (lid \(lastDelivered ? "closed" : "open"))")
     }
 
     func stop() {
+        if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
+        screenObserver = nil
         debounceTimer?.invalidate()
         debounceTimer = nil
         pending = nil

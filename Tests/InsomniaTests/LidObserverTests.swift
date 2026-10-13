@@ -46,6 +46,16 @@ final class LidObserverTests: XCTestCase {
         await fulfillment(of: [fired], timeout: 5)
     }
 
+    /// #97: a lid closed with an external display active is clamshell use,
+    /// not a closed bag. Only a closed lid with no external display counts.
+    func testALidClosedWithAnExternalDisplayCountsAsOpen() {
+        XCTAssertEqual(LidObserver.effectiveClosed(lid: true, externalDisplay: false), true)
+        XCTAssertEqual(LidObserver.effectiveClosed(lid: true, externalDisplay: true), false)
+        XCTAssertEqual(LidObserver.effectiveClosed(lid: false, externalDisplay: true), false)
+        XCTAssertEqual(LidObserver.effectiveClosed(lid: false, externalDisplay: false), false)
+        XCTAssertNil(LidObserver.effectiveClosed(lid: nil, externalDisplay: true))
+    }
+
     func testWaiterRunsAtOnceWithNoChangePending() {
         let observer = makeObserver()
 
